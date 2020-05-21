@@ -2,6 +2,6 @@
 
 __Files: How To Run__<br>
 - [covid-linear-regression.py](https://github.com/gartenb/covid-linear-regression/blob/master/covid-linear-regression.py) : In terminal, 'cd' into the correct forlder, then use execute the command:<br>
-	$ python covid-linear-regression.py<br>
+		$ python covid-linear-regression.py<br>
 
 Note: All Data Courtesy of [COVID-19 Data Repository by the Center for Systems Science and Engineering (CSSE) at Johns Hopkins University](https://github.com/CSSEGISandData/COVID-19)

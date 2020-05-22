@@ -10,4 +10,4 @@ __Files: Description + How To Run__<br>
 	* To run the program, in terminal 'cd' into the correct forlder, then use execute the command:<br>
 		$ python covid-linear-regression.py<br>
 
-Note: All Data Courtesy of [COVID-19 Data Repository by the Center for Systems Science and Engineering (CSSE) at Johns Hopkins University](https://github.com/CSSEGISandData/COVID-19)
+Note: All data courtesy of [COVID-19 Data Repository by the Center for Systems Science and Engineering (CSSE) at Johns Hopkins University](https://github.com/CSSEGISandData/COVID-19)

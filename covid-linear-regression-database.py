@@ -30,17 +30,15 @@ def create_db(dbname, username, password, create):
     cur.close()
     conn.close()
 
-def data_input(engine):
+def data_input(conn, cur):
     """ Finds the desired data and inserts into database
     
     Args:
-        engine (str): database engine
+        conn (Connection): connection to the database
+        cur (Cursor): cursor to the database
     """
-    
-    # setup database connection
-    conn = engine.raw_connection()
+
     conn.autocommit = True
-    cur = conn.cursor()
     
     v1_cols = ['Country/Region', 'Confirmed', 'Deaths', 'Recovered'] # format for up until 3/21 (inclusive)
     v2_cols = ['Country_Region', 'Confirmed', 'Deaths', 'Recovered'] # format for after 3/21
@@ -72,51 +70,84 @@ def data_input(engine):
     
     conn.commit()
     # close database connection
-    cur.close()
-    conn.close()
 
-def data_processing_output(engine, train_test_split):
-    """ Collects the data from the database and does analysis using linear regression
+def data_retrieval(cur, train, train_test_split, start_i = 0):
+    """ Collects and reformats the data from the database
     
     Args:
-        engine (str): database engine
+        cur (Cursor): cursor to the database
+        train (bool): True for Training, False for Testing
+        train_test_split (str): the train test split (May = 5)
+        start_i (int): defaults to 0, used when looking at test data to pre-increment its indeces
+        
+    Return:
+        dates ([datetime.date]): the sequential dates
+        X ([int]): an index corresponding to each date
+        y ([int]): the active number of infections at corresponding given date
     """
-    
-    # setup database connection
-    conn = engine.raw_connection()
-    cur = conn.cursor()
 
     delta = timedelta(days=1) # set to increment  1 day
+    if (train):
+        inequality = '<'
+    else:
+        inequality = '>='
+    
+    # get data from database
+    cur.execute('''SELECT my_date FROM daily_us where EXTRACT(MONTH FROM my_date){}{};'''.format(inequality, train_test_split))
+    dates = cur.fetchall()
+    dates = [tup[0] for tup in dates] # reformat data
+    cur.execute('''SELECT active FROM daily_us where EXTRACT(MONTH FROM my_date){}{};'''.format(inequality, train_test_split))
+    y = cur.fetchall()
+    y = [tup[0] for tup in y] # reformat data
+    X = np.arange(start_i,start_i+len(y)).reshape(-1,1) # create sequential indeces
 
-    # Train/Test Split at the start of train_test_split (May = 5)
-    # get training data from database
-    cur.execute('''SELECT my_date FROM daily_us where EXTRACT(MONTH FROM my_date)<%(train_test_split)s;''',{'train_test_split':train_test_split})
-    train_dates = cur.fetchall()
-    train_dates = [tup[0] for tup in train_dates] # reformat data
-    cur.execute('''SELECT active FROM daily_us where EXTRACT(MONTH FROM my_date)<%(train_test_split)s;''',{'train_test_split':train_test_split})
-    y_train = cur.fetchall()
-    y_train = [tup[0] for tup in y_train] # reformat data
-    X_train = np.arange(len(y_train)).reshape(-1,1)
+    return dates, X, y
 
-    # get test data from database
-    cur.execute('''SELECT my_date FROM daily_us where EXTRACT(MONTH FROM my_date)>=%(train_test_split)s;''',{'train_test_split':train_test_split})
-    test_dates = cur.fetchall()
-    test_dates = [tup[0] for tup in test_dates] # reformat data
-    cur.execute('''SELECT active FROM daily_us where EXTRACT(MONTH FROM my_date)>=%(train_test_split)s;''',{'train_test_split':train_test_split})
-    y_test = cur.fetchall()
-    y_test = [tup[0] for tup in y_test] # reformat data
-    X_test = np.arange(len(y_train), len(y_test)+len(y_train)).reshape(-1,1)
+def lin_reg(X_train, X_test, y_train, y_test):
+    """ Creates, fits and scores the linear regression model
+    
+    Args:
+        test_dates ([datetime.date]): list of dates for test data
+        X_train ([int]): training data indeces
+        X_test ([int]): test data indeces
+        y_train ([int]): training data of active infections
+        y_test ([int]): test data of active infections
+        
+    Return: 
+        y_pred ([int]): predicted data of active infections for test_dates
+    """
 
-    # close database connection
-    cur.close()
-    conn.close()
-
-    # create and fit the linear regression model
-    reg = LinearRegression().fit(X_train.reshape(-1,1), y_train)
+    reg = LinearRegression().fit(X_train, y_train)
     y_pred = reg.predict(X_test) # predict values
-    report = pd.DataFrame(data = {'Date':test_dates, 'Actual':y_test, 'Predicted':y_pred.astype(int)}) # makes a compact report
+    print('R^2 Value:', reg.score(X_test, y_test)) # scoring metric
+    
+    return y_pred
 
-    # create the visual
+def report(test_dates, y_test, y_pred):
+    """ Creates a compact report of data and regression predictions
+    
+    Args:
+        test_dates ([datetime.date]): list of dates for test data
+        y_test ([int]): test data of active infections
+        y_pred ([int]): predicted data of active infections for test_dates
+    """
+
+    report = pd.DataFrame(data = {'Date':test_dates, 'Actual':y_test, 'Predicted':y_pred.astype(int)})
+    print('\nReport:\n',report.to_string(index=False))
+
+def visual(train_dates, test_dates, y_train, y_test, y_pred):
+    """ Visualizes data
+    
+    Args:
+        train_dates ([datetime.date]): list of dates for training data
+        test_dates ([datetime.date]): list of dates for test data
+        y_train ([int]): training data of active infections
+        y_test ([int]): test data of active infections
+        y_pred ([int]): predicted data of active infections for test_dates
+    """
+    
+    delta = timedelta(days=1) # set to increment  1 day
+    
     plt.scatter(train_dates, y_train, c='b')
     plt.scatter(test_dates, y_test, c='g')
     plt.plot(test_dates, y_pred, color='k')
@@ -131,9 +162,7 @@ def data_processing_output(engine, train_test_split):
     plt.title('Predicting Active US Covid-19 Infections using Linear Regression')
     plt.show()
 
-    print('R^2 Value:', reg.score(X_test, y_test)) # scoring metric
-    print('\nReport:\n',report.to_string(index=False))
-    
+
 def main():
     username = 'bg' # database username
     passw = 'pass' # database password
@@ -145,10 +174,28 @@ def main():
  
     # connect to database
     engine = create_engine('postgresql+psycopg2://'+username+':'+passw+'@localhost/'+dbname)
+    conn = engine.raw_connection()
+    cur = conn.cursor()
+    
     # take in data
-    data_input(engine)
-    # analyze the data
-    data_processing_output(engine, train_test_split)
+    data_input(conn, cur)
+    
+    # retrieve the data
+    train_dates, X_train, y_train = data_retrieval(cur, True, train_test_split)
+    test_dates, X_test, y_test = data_retrieval(cur, False, train_test_split, len(X_train))
+    
+    # model the data
+    y_pred = lin_reg(X_train, X_test, y_train, y_test)
+    
+    # create a results report
+    report(test_dates, y_test, y_pred)
+    
+    # create visualizations
+    visual(train_dates, test_dates, y_train, y_test, y_pred)
+    
+    # close database connection
+    cur.close()
+    conn.close()
     
     # delete the database
     create_db(dbname, username, passw, False)

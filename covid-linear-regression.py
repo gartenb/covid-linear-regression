@@ -64,5 +64,5 @@ plt.ylabel('Active Infections')
 plt.title('Predicting Active US Covid-19 Infections using Linear Regression')
 plt.show()
 
-print('R^2 Score:', reg.score(X_test, y_test)) # scoring metric
+print('R^2 Value:', reg.score(X_test, y_test)) # scoring metric
 print('\nReport:\n',report)
